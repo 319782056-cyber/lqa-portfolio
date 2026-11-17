@@ -1,13 +1,14 @@
 "use client";
 import {Fragment,useMemo,useState} from "react";
 import AdvancedAnalytics from "./advanced-analytics";
-type Tab="overview"|"products"|"stores"|"regions"|"quality"|"forecast"|"profit"|"customer"|"inventory"|"channel";type Scenario="保守"|"基准"|"乐观";
+import BusinessReports from "./business-reports";
+type Tab="overview"|"products"|"stores"|"regions"|"quality"|"forecast"|"profit"|"customer"|"inventory"|"channel"|"reports";type Scenario="保守"|"基准"|"乐观";
 const brands=[{name:"品牌 A",scale:1,stores:486,target:820000},{name:"品牌 B",scale:.72,stores:218,target:590000},{name:"品牌 C",scale:.43,stores:126,target:360000}];
 const months=[{label:"2026年10月",days:31,factor:1.08},{label:"2026年09月",days:30,factor:1.02},{label:"2026年08月",days:31,factor:.96},{label:"2026年07月",days:31,factor:.91},{label:"2026年06月",days:30,factor:.87},{label:"2026年05月",days:31,factor:.83},{label:"2026年04月",days:30,factor:.89},{label:"2026年03月",days:31,factor:.94},{label:"2026年02月",days:28,factor:.78},{label:"2026年01月",days:31,factor:.86}];
 const seeds=[{name:"大红袍珍珠奶茶",base:184260,growth:.182},{name:"茉莉轻乳茶",base:147830,growth:.126},{name:"鸭屎香柠檬茶",base:126440,growth:.084},{name:"锡兰红茶拿铁",base:98620,growth:-.021},{name:"桂花乌龙鲜奶茶",base:75480,growth:.067},{name:"青提茉莉冰茶",base:63140,growth:.215},{name:"生椰拿铁",base:52860,growth:.093},{name:"芝士葡萄冰",base:41620,growth:-.038}];
 const stores=[{name:"北京朝阳店",code:"S1001",weight:.18,region:"华北"},{name:"上海静安店",code:"S1002",weight:.16,region:"华东"},{name:"深圳南山店",code:"S1003",weight:.15,region:"华南"},{name:"杭州西湖店",code:"S1004",weight:.13,region:"华东"},{name:"成都春熙路店",code:"S1005",weight:.12,region:"西南"},{name:"武汉江汉路店",code:"S1006",weight:.10,region:"华中"},{name:"天津和平店",code:"S1007",weight:.09,region:"华北"},{name:"广州天河店",code:"S1008",weight:.07,region:"华南"}];
 const regions=[{name:"华北",weight:.27,growth:.148},{name:"华东",weight:.29,growth:.096},{name:"华南",weight:.19,growth:.213},{name:"华中",weight:.14,growth:.042},{name:"西南",weight:.11,growth:-.017}];
-const nav:{id:Tab;label:string;hint:string}[]=[{id:"overview",label:"经营总览",hint:"核心指标与趋势"},{id:"products",label:"产品分析",hint:"销量结构与排名"},{id:"stores",label:"门店分析",hint:"门店表现与贡献"},{id:"regions",label:"区域分析",hint:"区域经营对比"},{id:"quality",label:"数据质量",hint:"异常与处理记录"},{id:"forecast",label:"销售预测",hint:"月底情景测算"},{id:"profit",label:"利润分析",hint:"收入成本与毛利"},{id:"customer",label:"用户分析",hint:"复购与用户价值"},{id:"inventory",label:"库存分析",hint:"周转与补货建议"},{id:"channel",label:"渠道分析",hint:"渠道结构与转化"}];
+const nav:{id:Tab;label:string;hint:string}[]=[{id:"overview",label:"经营总览",hint:"核心指标与趋势"},{id:"products",label:"产品分析",hint:"销量结构与排名"},{id:"stores",label:"门店分析",hint:"门店表现与贡献"},{id:"regions",label:"区域分析",hint:"区域经营对比"},{id:"quality",label:"数据质量",hint:"异常与处理记录"},{id:"forecast",label:"销售预测",hint:"月底情景测算"},{id:"profit",label:"利润分析",hint:"收入成本与毛利"},{id:"customer",label:"用户分析",hint:"复购与用户价值"},{id:"inventory",label:"库存分析",hint:"周转与补货建议"},{id:"channel",label:"渠道分析",hint:"渠道结构与转化"},{id:"reports",label:"日报 / 周报",hint:"经营简报与新品追踪"}];
 const fmt=(n:number)=>Math.round(n).toLocaleString("zh-CN"),pct=(n:number)=>(n>=0?"+":"")+(n*100).toFixed(1)+"%";
 function download(name:string,rows:(string|number)[][]){const body=rows.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(",")).join("\r\n");const url=URL.createObjectURL(new Blob(["\ufeff",body],{type:"text/csv;charset=utf-8"}));const a=document.createElement("a");a.href=url;a.download=name;a.click();URL.revokeObjectURL(url);}
 export default function Home(){
@@ -37,6 +38,7 @@ export default function Home(){
  {tab==="customer"&&<AdvancedAnalytics type="customer" totalSales={total} days={month.days} brandName={brand.name} brandScale={brand.scale}/>}
  {tab==="inventory"&&<AdvancedAnalytics type="inventory" totalSales={total} days={month.days} brandName={brand.name} brandScale={brand.scale}/>}
  {tab==="channel"&&<AdvancedAnalytics type="channel" totalSales={total} days={month.days} brandName={brand.name} brandScale={brand.scale}/>}
+ {tab==="reports"&&<BusinessReports brandName={brand.name} totalSales={total} days={month.days} monthLabel={month.label}/>}
  </div></section>
  <section className="dash-about" id="about"><div><small>PROJECT NOTES</small><h2>让分析过程可解释，<br/>让业务结论可追溯。</h2></div><div><p>本项目当前使用脱敏模拟数据，主要用于演示经营分析方法、指标口径、交互设计和数据表达。页面刷新仅重新生成演示数据，不会连接外部业务系统，也不会创建真实定时任务。</p><p>后续可在获得授权后逐步加入脱敏案例，并补充数据来源、清洗规则、指标定义、分析过程和业务建议。</p><div className="dash-chips"><span>Excel / CSV</span><span>SQL 分析</span><span>经营指标体系</span><span>数据质量</span><span>业务洞察</span></div></div></section>
  <footer className="dash-footer"><b>刘庆安 · 经营数据分析作品集</b><span>演示数据仅用于作品展示，不代表真实企业经营结果。</span><button onClick={refresh}>重新生成模拟数据 ↻</button></footer></main>;
