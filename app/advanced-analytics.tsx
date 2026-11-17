@@ -10,7 +10,6 @@ type Props = {
   days: number;
   brandName: string;
   brandScale: number;
-  target: number;
 };
 
 const number = (value: number) => Math.round(value).toLocaleString("zh-CN");
@@ -25,7 +24,7 @@ function Panel({ eyebrow, title, description, children }: { eyebrow: string; tit
   return <section className="dash-card advanced-panel"><header><div><small>{eyebrow}</small><h3>{title}</h3><p>{description}</p></div><span className="dash-tag">情景模拟</span></header>{children}</section>;
 }
 
-export default function AdvancedAnalytics({ type, totalSales, days, brandName, brandScale, target }: Props) {
+export default function AdvancedAnalytics({ type, totalSales, days, brandName, brandScale }: Props) {
   const profile = brandName === "品牌 B"
     ? { price: 19.6, cost: 7.1, discount: .055, repeat: .41, delivery: .49 }
     : brandName === "品牌 C"
