@@ -25,7 +25,7 @@ test("dashboard includes calculated metrics, CSV export and stateful alerts", as
 
 test("advanced modules disclose assumptions and cover unit economics, users, stock and channels", async () => {
   const advanced = await read("../app/advanced-analytics.tsx");
-  for (const phrase of ["UNIT ECONOMICS", "CUSTOMER INTELLIGENCE", "INVENTORY & SUPPLY", "CHANNEL & CONVERSION", "演示假设", "并非真实仓储数据", "不代表真实埋点采集结果"]) {
+  for (const phrase of ["UNIT ECONOMICS", "CUSTOMER INTELLIGENCE", "INVENTORY & SUPPLY", "CHANNEL & CONVERSION", "演示假设", "并非真实仓储数据", "不代表真实埋点数据"]) {
     assert.ok(advanced.includes(phrase), `missing advanced analysis disclosure: ${phrase}`);
   }
   assert.match(advanced, /grossMargin/);
@@ -49,7 +49,7 @@ test("daily and weekly reports include trend summaries and new-product tracking"
   const css = await read("../app/dashboard.css");
   assert.match(page, /日报 \/ 周报/);
   assert.match(page, /<BusinessReports/);
-  for (const phrase of ["经营变化自动解读", "新品销售进度追踪", "目标完成率", "门店覆盖率", "模拟对照周期", "不代表真实新品经营记录"]) {
+  for (const phrase of ["经营变化自动解读", "新品销售进度追踪", "目标完成率", "门店覆盖率", "模拟对照周期", "非真实新品经营记录"]) {
     assert.ok(report.includes(phrase), `missing report feature: ${phrase}`);
   }
   assert.match(report, /useMemo/);
