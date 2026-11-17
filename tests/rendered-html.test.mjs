@@ -42,3 +42,17 @@ test("metadata and documentation describe the expanded portfolio and data bounda
     assert.ok(readme.includes(phrase), `README missing: ${phrase}`);
   }
 });
+
+test("daily and weekly reports include trend summaries and new-product tracking", async () => {
+  const page = await read("../app/page.tsx");
+  const report = await read("../app/business-reports.tsx");
+  const css = await read("../app/dashboard.css");
+  assert.match(page, /日报 \/ 周报/);
+  assert.match(page, /<BusinessReports/);
+  for (const phrase of ["经营变化自动解读", "新品销售进度追踪", "目标完成率", "门店覆盖率", "模拟对照周期", "不代表真实新品经营记录"]) {
+    assert.ok(report.includes(phrase), `missing report feature: ${phrase}`);
+  }
+  assert.match(report, /useMemo/);
+  assert.match(css, /report-kpis/);
+  assert.match(css, /report-insight-grid/);
+});
