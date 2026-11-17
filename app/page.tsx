@@ -14,7 +14,7 @@ export default function Home(){
  const [tab,setTab]=useState<Tab>("overview"),[bi,setBi]=useState(0),[mi,setMi]=useState(0),[q,setQ]=useState(""),[scenario,setScenario]=useState<Scenario>("基准"),[version,setVersion]=useState(0),[last,setLast]=useState("尚未刷新"),[done,setDone]=useState<string[]>([]),[expanded,setExpanded]=useState<string|null>(null);
  const brand=brands[bi],month=months[mi],factor=brand.scale*month.factor*(1+(version%5)*.006);
  const products=useMemo(()=>seeds.map((p,i)=>({...p,sales:Math.round(p.base*factor*(1+(i%3)*.015)),storeCount:Math.max(12,Math.round(brand.stores*(.78-i*.045)))})).sort((a,b)=>b.sales-a.sales),[factor,brand.stores]);
- const total=products.reduce((s,p)=>s+p.sales,0),daily=total/month.days,previous=seeds.reduce((s,p,i)=>s+p.base*brand.scale*months[Math.min(mi+1,months.length-1)].factor*(1+(i%3)*.015),0),growth=total/previous-1;
+ const total=products.reduce((s,p)=>s+p.sales,0),daily=total/month.days,previous=seeds.reduce((s,p,i)=>s+p.base*brand.scale*months[Math.min(mi+1,months.length-1)].factor*(1+(i%3)*.015)*(1+(version%5)*.006),0),growth=total/previous-1;
  const storeRows=stores.map((s,i)=>({...s,sales:Math.round(total*s.weight),daily:total*s.weight/month.days,growth:[.12,.08,.19,-.03,.15,.04,-.06,.11][i]})).sort((a,b)=>b.sales-a.sales);
  const regionRows=regions.map(r=>({...r,sales:Math.round(total*r.weight),storeCount:stores.filter(s=>s.region===r.name).length}));
  const filteredProducts=products.filter(p=>p.name.toLowerCase().includes(q.toLowerCase())),filteredStores=storeRows.filter(s=>(s.name+s.code+s.region).toLowerCase().includes(q.toLowerCase()));
