@@ -25,7 +25,7 @@ test("dashboard includes calculated metrics, CSV export and stateful alerts", as
 
 test("advanced modules disclose assumptions and cover unit economics, users, stock and channels", async () => {
   const advanced = await read("../app/advanced-analytics.tsx");
-  for (const phrase of ["UNIT ECONOMICS", "CUSTOMER INTELLIGENCE", "INVENTORY & SUPPLY", "CHANNEL & CONVERSION", "演示假设", "并非真实仓储数据", "不代表真实埋点数据"]) {
+  for (const phrase of ["UNIT ECONOMICS", "CUSTOMER INTELLIGENCE", "INVENTORY & SUPPLY", "CHANNEL & CONVERSION", "演示假设", "并非真实仓储数据", "不代表真实埋点采集结果"]) {
     assert.ok(advanced.includes(phrase), `missing advanced analysis disclosure: ${phrase}`);
   }
   assert.match(advanced, /grossMargin/);
