@@ -1,287 +1,37 @@
 "use client";
-
-import { useMemo, useState } from "react";
-
-type View = "update" | "overview" | "products" | "stores" | "regions" | "launch" | "alerts" | "forecast";
-type ProductSeed = { name: string; baseSales: number; storeCount: number; trend: number };
-
-const monthOptions = [
-  { label: "2026年08月", factor: 1, days: 12, partial: true },
-  { label: "2026年07月", factor: .94, days: 31, partial: false },
-  { label: "2026年06月", factor: .87, days: 30, partial: false },
-];
-
-const brands = [
-  { name: "品牌 A", scale: 1, stores: 486, sku: 43, growth: 12.8, target: 2011717 },
-  { name: "品牌 B", scale: .58, stores: 218, sku: 38, growth: 8.6, target: 598513 },
-  { name: "品牌 C", scale: .21, stores: 72, sku: 31, growth: 16.4, target: 176300 },
-  { name: "品牌 D", scale: .16, stores: 58, sku: 27, growth: 11.2, target: 132200 },
-  { name: "品牌 E", scale: .12, stores: 41, sku: 24, growth: 19.7, target: 98800 },
-];
-
-const productSeeds: ProductSeed[] = [
-  { name: "大红袍珍珠奶茶", baseSales: 184260, storeCount: 392, trend: 18.2 },
-  { name: "茉莉轻乳茶", baseSales: 147830, storeCount: 368, trend: 12.6 },
-  { name: "鸭屎香柠檬茶", baseSales: 126440, storeCount: 341, trend: 8.4 },
-  { name: "锡兰红茶拿铁", baseSales: 98620, storeCount: 315, trend: -2.1 },
-  { name: "桂花乌龙鲜奶茶", baseSales: 75480, storeCount: 286, trend: 6.7 },
-  { name: "青提茉莉冰茶", baseSales: 63140, storeCount: 254, trend: 21.5 },
-];
-
-const storeSeeds = [
-  { name: "门店 A", code: "S1001", weight: .28 },
-  { name: "门店 B", code: "S1002", weight: .24 },
-  { name: "门店 C", code: "S1003", weight: .20 },
-  { name: "门店 D", code: "S1004", weight: .16 },
-  { name: "门店 E", code: "S1005", weight: .12 },
-];
-
-const navItems: { id: View; label: string; hint: string }[] = [
-  { id: "update", label: "自动任务", hint: "采集与更新" },
-  { id: "overview", label: "数据总览", hint: "经营指标" },
-  { id: "products", label: "产品月度", hint: "产品 → 门店" },
-  { id: "stores", label: "门店排名", hint: "门店 → 产品" },
-  { id: "regions", label: "区域经营", hint: "区域对比" },
-  { id: "launch", label: "产品看板", hint: "自定义生成" },
-  { id: "alerts", label: "异常监控", hint: "预警与确认" },
-  { id: "forecast", label: "销售预测", hint: "月底预估" },
-];
-
-function formatInt(value: number) {
-  return Math.round(value).toLocaleString("zh-CN");
-}
-
-function downloadCsv(filename: string, rows: (string | number)[][]) {
-  const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
-  const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-export default function Home() {
-  const [view, setView] = useState<View>("overview");
-  const [brandIndex, setBrandIndex] = useState(0);
-  const [monthIndex, setMonthIndex] = useState(0);
-  const [query, setQuery] = useState("");
-  const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
-  const [expandedStore, setExpandedStore] = useState<string | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState(0);
-  const [importMessage, setImportMessage] = useState("最近一次自动更新已完成");
-  const [confirmedUpdate, setConfirmedUpdate] = useState(false);
-  const [handledAlerts, setHandledAlerts] = useState<string[]>([]);
-  const [selectedRegion, setSelectedRegion] = useState("华北区域");
-  const [forecastMode, setForecastMode] = useState("基准");
-  const [launchProduct, setLaunchProduct] = useState(productSeeds[0].name);
-  const [launchDate, setLaunchDate] = useState("2026-07-01");
-  const [target, setTarget] = useState(260000);
-  const [generated, setGenerated] = useState(true);
-
-  const brand = brands[brandIndex];
-  const month = monthOptions[monthIndex];
-  const products = useMemo(() => productSeeds.map((seed, index) => {
-    const sales = Math.round(seed.baseSales * brand.scale * month.factor);
-    const storeCount = Math.max(18, Math.round(seed.storeCount * Math.min(1, brand.scale + .12)));
-    const stores = storeSeeds.map((store, storeIndex) => ({
-      ...store,
-      sales: Math.round(sales * store.weight),
-      daily: sales * store.weight / month.days,
-      contribution: store.weight,
-      rank: storeIndex + 1,
-    }));
-    return {
-      ...seed,
-      rank: index + 1,
-      sales,
-      storeCount,
-      usd: sales / storeCount / month.days,
-      trend: seed.trend + brandIndex * 1.2 - monthIndex * 1.6,
-      stores,
-    };
-  }), [brand, brandIndex, month, monthIndex]);
-
-  const storeRows = useMemo(() => storeSeeds.map((store, index) => {
-    const storeProducts = products.map((product) => ({
-      name: product.name,
-      sales: product.stores[index].sales,
-      daily: product.stores[index].daily,
-    })).sort((a, b) => b.sales - a.sales);
-    const sales = storeProducts.reduce((sum, item) => sum + item.sales, 0);
-    return { ...store, rank: index + 1, sales, daily: sales / month.days, sku: storeProducts.length, products: storeProducts };
-  }), [products, month.days]);
-
-  const visibleProducts = products.filter((item) => item.name.includes(query.trim()));
-  const visibleStores = storeRows.filter((item) => `${item.name}${item.code}`.toLowerCase().includes(query.trim().toLowerCase()));
-  const totalSales = Math.round(7826222 * brand.scale * month.factor);
-  const progress = totalSales / brand.target;
-
-  function switchView(next: View) {
-    setView(next);
-    setQuery("");
-    setExpandedProduct(null);
-    setExpandedStore(null);
-  }
-
-  function simulateImport() {
-    if (importing) return;
-    setImporting(true);
-    setConfirmedUpdate(false);
-    setImportMessage("正在连接业务数据源…");
-    setImportProgress(18);
-    window.setTimeout(() => { setImportMessage("正在增量拉取销售、门店与 SKU 数据…"); setImportProgress(44); }, 650);
-    window.setTimeout(() => { setImportMessage("正在执行日期完整性与异常波动校验…"); setImportProgress(72); }, 1250);
-    window.setTimeout(() => { setImportMessage("更新完成：新增 128,640 行，发现 3 项待确认变化"); setImportProgress(100); setImporting(false); }, 2050);
-  }
-
-  function exportProducts() {
-    downloadCsv(`${brand.name}_${month.label}_产品销售.csv`, [
-      ["排名", "产品", "销售杯数", "售卖门店数", "USD", "同比"],
-      ...visibleProducts.map((item) => [item.rank, item.name, item.sales, item.storeCount, item.usd.toFixed(2), `${item.trend.toFixed(1)}%`]),
-    ]);
-  }
-
-  function exportStores() {
-    downloadCsv(`${brand.name}_${month.label}_门店排名.csv`, [
-      ["排名", "门店", "门店编码", "销售杯数", "售卖产品数", "日均杯数"],
-      ...visibleStores.map((item) => [item.rank, item.name, item.code, item.sales, item.sku, item.daily.toFixed(2)]),
-    ]);
-  }
-
-  const launchResult = products.find((item) => item.name === launchProduct) ?? products[0];
-  const launchDays = Math.max(1, Math.round((new Date("2026-08-12").getTime() - new Date(launchDate).getTime()) / 86400000) + 1);
-  const launchSales = Math.round(launchResult.sales * 1.62);
-  const regionRows = [
-    { name: "华北区域", sales: totalSales * .31, stores: Math.round(brand.stores * .28), growth: 14.8, usd: 13.72 },
-    { name: "华东区域", sales: totalSales * .27, stores: Math.round(brand.stores * .25), growth: 9.6, usd: 12.94 },
-    { name: "华南区域", sales: totalSales * .19, stores: Math.round(brand.stores * .18), growth: 21.3, usd: 14.16 },
-    { name: "华中区域", sales: totalSales * .14, stores: Math.round(brand.stores * .16), growth: 4.2, usd: 10.88 },
-    { name: "西南区域", sales: totalSales * .09, stores: Math.round(brand.stores * .13), growth: -1.7, usd: 8.94 },
-  ];
-  const alerts = [
-    { id: "A01", level: "高", title: "门店 C 销量突降 36%", detail: "较近 7 日均值明显下降，建议核对营业状态或数据回传。", time: "08:42" },
-    { id: "A02", level: "高", title: "2026-08-11 缺少 2 家门店数据", detail: "自动任务已重试 2 次，仍未收到门店 S1042、S1088 明细。", time: "07:18" },
-    { id: "A03", level: "中", title: "发现 4 个未映射 SKU", detail: "系统已使用名称规则临时归类，等待补充标准 SKU 对照。", time: "06:51" },
-    { id: "A04", level: "低", title: "品牌 B 新增 3 家门店", detail: "门店主数据已同步，需确认是否计入本月活跃门店口径。", time: "06:36" },
-  ];
-  const forecastFactor = forecastMode === "乐观" ? 1.08 : forecastMode === "保守" ? .92 : 1;
-  const forecastSales = Math.round(totalSales / month.days * 31 * forecastFactor);
-
-  return (
-    <main id="top">
-      <header className="site-header">
-        <a className="site-mark" href="#top">刘庆安 <span>·</span> 数据作品演示</a>
-        <a className="header-link" href="#dashboard">进入看板 ↓</a>
-      </header>
-
-      <section className="project-intro">
-        <div className="intro-kicker">INTERACTIVE AUTOMATION DEMO</div>
-        <h1>销售数据自动化<br />看板演示</h1>
-        <p>部署在服务器上的全自动经营数据平台：定时连接业务数据源，识别并确认更新内容，主动报告异常，再生成可供团队成员统一访问的多主题经营看板。</p>
-        <div className="automation-flow">
-          <div><b>01</b><strong>定时采集</strong><span>服务器按计划连接业务系统，自动增量同步</span></div>
-          <div><b>02</b><strong>更新确认</strong><span>对比新增日期、行数与指标变化，确认后发布</span></div>
-          <div><b>03</b><strong>异常告警</strong><span>缺失日期、突增突降、映射失败主动报错</span></div>
-          <div><b>04</b><strong>统一访问</strong><span>看板部署在网页端，团队成员打开链接即可使用</span></div>
-        </div>
-      </section>
-
-      <section className="dashboard-stage" id="dashboard">
-        <div className="dashboard-window">
-          <aside className="side-nav">
-            <div className="app-title"><span className="app-icon">D</span><div><strong>销售数据中心</strong><small>互动演示版本</small></div></div>
-            <nav aria-label="数据模块">
-              {navItems.map((item, index) => (
-                <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => switchView(item.id)}>
-                  <span className="nav-number">0{index + 1}</span><span><b>{item.label}</b><small>{item.hint}</small></span>
-                </button>
-              ))}
-            </nav>
-            <div className="privacy-note"><span className="live-dot" />服务器运行正常<br /><small>团队成员可通过网页统一访问</small></div>
-          </aside>
-
-          <div className="dashboard-main">
-            <div className="dashboard-header">
-              <div><span className="breadcrumb">数据看板 / {navItems.find((item) => item.id === view)?.label}</span><h2>{navItems.find((item) => item.id === view)?.label}</h2></div>
-              <div className="data-date">数据更新至 <strong>2026-08-12</strong></div>
-            </div>
-
-            {view !== "update" && <div className="filter-bar">
-              <div className="brand-switch" role="tablist" aria-label="品牌筛选">{brands.map((item, index) => <button key={item.name} className={brandIndex === index ? "active" : ""} onClick={() => { setBrandIndex(index); setExpandedProduct(null); setExpandedStore(null); }}>{item.name}</button>)}</div>
-              <select value={monthIndex} onChange={(event) => setMonthIndex(Number(event.target.value))} aria-label="选择月份">{monthOptions.map((item, index) => <option key={item.label} value={index}>{item.label}{item.partial ? "（截至当前）" : ""}</option>)}</select>
-            </div>}
-
-            {view === "update" && <section className="panel update-panel">
-              <div className="panel-heading"><div><span className="panel-kicker">AUTOMATION CENTER</span><h3>服务器自动任务中心</h3><p>系统每天按计划连接业务数据源，增量同步并完成质量检查，无需人工上传文件。</p></div><span className="safe-badge online">● 自动调度已开启</span></div>
-              <div className="job-status-grid"><article><span>最近运行</span><strong>今日 06:30</strong><small>耗时 4分18秒</small></article><article><span>同步数据</span><strong>128,640</strong><small>新增明细行</small></article><article><span>质量校验</span><strong>12 / 15</strong><small>3项待确认</small></article><article><span>下次运行</span><strong>明日 06:30</strong><small>自动执行</small></article></div>
-              <div className="pipeline"><div className="done"><b>1</b><span><strong>连接数据源</strong><small>销售 / 门店 / SKU</small></span></div><i /><div className="done"><b>2</b><span><strong>增量同步</strong><small>识别新增与变更</small></span></div><i /><div className="done"><b>3</b><span><strong>质量校验</strong><small>完整性与异常波动</small></span></div><i /><div className={confirmedUpdate ? "done" : "pending"}><b>4</b><span><strong>更新确认</strong><small>{confirmedUpdate ? "已确认发布" : "3项等待确认"}</small></span></div></div>
-              <div className="import-progress"><div className="progress-copy"><span>{importMessage}</span><strong>{importProgress || 100}%</strong></div><div className="progress-track"><i style={{ width: `${importProgress || 100}%` }} /></div></div>
-              <div className="update-actions"><button className="primary-button" onClick={simulateImport} disabled={importing}>{importing ? "任务运行中…" : "立即运行一次更新"}</button><button className="secondary-button" onClick={() => { setConfirmedUpdate(true); setImportMessage("更新内容已确认，看板已向全部访问者发布"); }}>确认并发布更新</button></div>
-              <div className="change-list"><div><span className="change-type new">新增</span><strong>8个业务日期</strong><small>2026-08-05 至 2026-08-12</small></div><div><span className="change-type modify">变更</span><strong>3家门店主数据</strong><small>名称或所属区域发生变化</small></div><div><span className="change-type alert">异常</span><strong>2项指标波动</strong><small>已进入异常监控等待处理</small></div></div>
-            </section>}
-
-            {view === "overview" && <>
-              <div className="metric-grid">
-                <article><span>当月销售杯数</span><strong>{formatInt(totalSales)}</strong><small>{month.partial ? `统计 ${month.days} 天` : "完整月份"}</small></article>
-                <article><span>活跃门店</span><strong>{brand.stores}</strong><small>家门店</small></article>
-                <article><span>售卖产品</span><strong>{brand.sku}</strong><small>去重 SKU</small></article>
-                <article className="accent"><span>同比增长</span><strong>+{brand.growth}%</strong><small>较上年同月</small></article>
-              </div>
-              <div className="overview-grid">
-                <section className="panel trend-panel"><div className="panel-heading compact"><div><span className="panel-kicker">MONTHLY TREND</span><h3>近 6 个月销售趋势</h3></div><button className="text-button" onClick={() => switchView("products")}>查看产品明细 →</button></div><div className="bar-chart">{[62, 71, 67, 78, 84, 76].map((height, index) => <div key={index}><span className={index === 5 ? "current" : ""} style={{ height: `${height}%` }}><i>{formatInt(totalSales * (height / 76))}</i></span><small>{index + 3}月</small></div>)}</div></section>
-                <section className="panel progress-panel"><span className="panel-kicker">BU PROGRESS</span><h3>当月目标进度</h3><strong className="progress-value">{(progress * 100).toFixed(1)}%</strong><div className="wide-track"><i style={{ width: `${Math.min(progress * 100, 100)}%` }} /></div><div className="progress-numbers"><span>实际 {formatInt(totalSales)}</span><span>目标 {formatInt(brand.target)}</span></div><p>历史月份仅显示实际进度；当前月根据数据库已有日期计算。</p></section>
-              </div>
-            </>}
-
-            {view === "products" && <section className="panel data-panel">
-              <div className="panel-heading table-heading"><div><span className="panel-kicker">PRODUCT → STORE</span><h3>产品月度销售排名</h3><p>点击产品行，展开查看门店 A—E 的销量和日均杯数。</p></div><button className="export-button" onClick={exportProducts}>导出当前结果</button></div>
-              <div className="table-tools"><label><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="输入部分产品名称自动筛选" /></label><span>USD = 销量 ÷ 售卖门店数 ÷ 统计天数</span></div>
-              <div className="data-table product-table"><div className="table-head"><span>排名 / 产品</span><span>销售杯数</span><span>门店数</span><span>USD</span><span>同比</span></div>{visibleProducts.map((item) => <div className="expand-group" key={item.name}><button className="table-row" onClick={() => setExpandedProduct(expandedProduct === item.name ? null : item.name)} aria-expanded={expandedProduct === item.name}><span><b>{String(item.rank).padStart(2, "0")}</b><strong>{item.name}</strong><em>{expandedProduct === item.name ? "−" : "+"}</em></span><span>{formatInt(item.sales)}</span><span>{item.storeCount}</span><span>{item.usd.toFixed(2)}</span><span className={item.trend >= 0 ? "positive" : "negative"}>{item.trend >= 0 ? "+" : ""}{item.trend.toFixed(1)}%</span></button>{expandedProduct === item.name && <div className="nested-table"><div className="nested-title"><strong>{item.name} · 售卖门店销量 TOP 5</strong><button onClick={() => downloadCsv(`${item.name}_门店明细.csv`, [["门店", "编码", "销量", "日均", "销量占比"], ...item.stores.map((store) => [store.name, store.code, store.sales, store.daily.toFixed(2), `${(store.contribution * 100).toFixed(0)}%`])])}>导出明细</button></div><div className="nested-head"><span>门店</span><span>门店编码</span><span>销售杯数</span><span>日均杯数</span><span>销量占比</span></div>{item.stores.map((store) => <div className="nested-row" key={store.code}><span><b>{store.rank}</b>{store.name}</span><span>{store.code}</span><span>{formatInt(store.sales)}</span><span>{store.daily.toFixed(2)}</span><span><i style={{ width: `${store.contribution * 220}%` }} />{(store.contribution * 100).toFixed(0)}%</span></div>)}</div>}</div>)}{!visibleProducts.length && <div className="empty-state">没有匹配的产品，请更换关键词。</div>}</div>
-            </section>}
-
-            {view === "stores" && <section className="panel data-panel">
-              <div className="panel-heading table-heading"><div><span className="panel-kicker">STORE → PRODUCT</span><h3>门店月度销售排名</h3><p>点击门店行，展开查看该门店销售的产品明细。</p></div><button className="export-button" onClick={exportStores}>导出当前结果</button></div>
-              <div className="table-tools"><label><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索门店名称或编码" /></label><span>门店按当月总销量降序排列</span></div>
-              <div className="data-table store-table"><div className="table-head"><span>排名 / 门店</span><span>门店编码</span><span>销售杯数</span><span>产品数</span><span>日均杯数</span></div>{visibleStores.map((store) => <div className="expand-group" key={store.code}><button className="table-row" onClick={() => setExpandedStore(expandedStore === store.code ? null : store.code)} aria-expanded={expandedStore === store.code}><span><b>{String(store.rank).padStart(2, "0")}</b><strong>{store.name}</strong><em>{expandedStore === store.code ? "−" : "+"}</em></span><span>{store.code}</span><span>{formatInt(store.sales)}</span><span>{store.sku}</span><span>{store.daily.toFixed(2)}</span></button>{expandedStore === store.code && <div className="nested-table"><div className="nested-title"><strong>{store.name} · 产品销售明细</strong><button onClick={() => downloadCsv(`${store.name}_产品明细.csv`, [["产品", "销量", "日均"], ...store.products.map((item) => [item.name, item.sales, item.daily.toFixed(2)])])}>导出明细</button></div><div className="nested-head store-products"><span>产品</span><span>销售杯数</span><span>日均杯数</span></div>{store.products.map((item) => <div className="nested-row store-products" key={item.name}><span>{item.name}</span><span>{formatInt(item.sales)}</span><span>{item.daily.toFixed(2)}</span></div>)}</div>}</div>)}</div>
-            </section>}
-
-            {view === "regions" && <section className="region-layout">
-              <div className="panel region-ranking"><div className="panel-heading table-heading"><div><span className="panel-kicker">REGION PERFORMANCE</span><h3>区域经营对比</h3><p>点击区域查看销售结构与关键表现。</p></div><button className="export-button" onClick={() => downloadCsv(`${brand.name}_${month.label}_区域经营.csv`, [["区域", "销量", "门店", "同比", "USD"], ...regionRows.map((item) => [item.name, Math.round(item.sales), item.stores, `${item.growth}%`, item.usd])])}>导出区域数据</button></div><div className="region-list">{regionRows.map((item, index) => <button key={item.name} className={selectedRegion === item.name ? "active" : ""} onClick={() => setSelectedRegion(item.name)}><span className="region-rank">0{index + 1}</span><span className="region-name"><strong>{item.name}</strong><small>{item.stores} 家活跃门店</small></span><span className="region-bar"><i style={{ width: `${item.sales / regionRows[0].sales * 100}%` }} /></span><span className="region-sales">{formatInt(item.sales)}<small>杯</small></span><span className={item.growth >= 0 ? "positive" : "negative"}>{item.growth >= 0 ? "+" : ""}{item.growth}%</span></button>)}</div></div>
-              <div className="panel region-detail"><span className="panel-kicker">SELECTED REGION</span><h3>{selectedRegion}</h3>{(() => { const current = regionRows.find((item) => item.name === selectedRegion) ?? regionRows[0]; return <><div className="region-metrics"><div><span>销售杯数</span><strong>{formatInt(current.sales)}</strong></div><div><span>活跃门店</span><strong>{current.stores}</strong></div><div><span>区域 USD</span><strong>{current.usd.toFixed(2)}</strong></div><div><span>同比增长</span><strong className={current.growth >= 0 ? "positive" : "negative"}>{current.growth >= 0 ? "+" : ""}{current.growth}%</strong></div></div><h4>产品贡献 TOP 3</h4>{products.slice(0, 3).map((product, index) => <div className="contribution-row" key={product.name}><span>{product.name}</span><i><b style={{ width: `${82 - index * 18}%` }} /></i><strong>{formatInt(product.sales * (current.sales / totalSales))}</strong></div>)}</>; })()}</div>
-            </section>}
-
-            {view === "alerts" && <section className="alerts-layout">
-              <div className="alert-summary"><article className="critical"><span>高优先级</span><strong>{alerts.filter((item) => item.level === "高" && !handledAlerts.includes(item.id)).length}</strong><small>需要立即处理</small></article><article><span>待确认异常</span><strong>{alerts.filter((item) => !handledAlerts.includes(item.id)).length}</strong><small>自动检测结果</small></article><article><span>今日已处理</span><strong>{handledAlerts.length + 7}</strong><small>处理记录已留痕</small></article><article><span>数据健康度</span><strong>96.8%</strong><small>15项规则持续监控</small></article></div>
-              <div className="panel alert-panel"><div className="panel-heading table-heading"><div><span className="panel-kicker">ANOMALY MONITOR</span><h3>异常值与数据质量告警</h3><p>系统自动识别缺失、突增突降和映射异常，处理状态向所有访问者同步。</p></div><span className="safe-badge online">实时监控中</span></div><div className="alert-list">{alerts.map((item) => { const handled = handledAlerts.includes(item.id); return <article key={item.id} className={handled ? "handled" : ""}><span className={`severity level-${item.level}`}>{handled ? "已处理" : `${item.level}优先级`}</span><div><strong>{item.title}</strong><p>{item.detail}</p><small>{item.id} · 今日 {item.time}</small></div><button onClick={() => setHandledAlerts((current) => handled ? current.filter((id) => id !== item.id) : [...current, item.id])}>{handled ? "撤回确认" : "确认并标记处理"}</button></article>; })}</div></div>
-            </section>}
-
-            {view === "forecast" && <section className="forecast-layout">
-              <div className="panel forecast-main"><div className="panel-heading table-heading"><div><span className="panel-kicker">MONTH-END FORECAST</span><h3>月底销量预测</h3><p>结合已发生日期、周末与历史波动生成三种情景。</p></div><div className="scenario-tabs">{["保守", "基准", "乐观"].map((item) => <button key={item} className={forecastMode === item ? "active" : ""} onClick={() => setForecastMode(item)}>{item}</button>)}</div></div><div className="forecast-value"><span>{forecastMode}情景预测销量</span><strong>{formatInt(forecastSales)}</strong><small>预计月底达成目标的 {(forecastSales / brand.target * 100).toFixed(1)}%</small></div><div className="forecast-chart">{[42, 48, 51, 58, 62, 68, 74, 81, 88, 94].map((value, index) => <div key={index}><i style={{ height: `${value * forecastFactor}%` }} className={index >= 4 ? "predicted" : "actual"} /><span>{index < 4 ? `${index * 3 + 3}日` : `${index * 3 + 3}日`}</span></div>)}</div><div className="chart-legend"><span><i className="actual" />已发生销量</span><span><i className="predicted" />预测销量</span></div></div>
-              <div className="panel forecast-drivers"><span className="panel-kicker">FORECAST DRIVERS</span><h3>预测影响因素</h3><div><span>周末拉动</span><strong className="positive">+12.4%</strong></div><div><span>门店数量变化</span><strong className="positive">+3.1%</strong></div><div><span>近期日均波动</span><strong className="negative">-2.8%</strong></div><div><span>新品销售贡献</span><strong className="positive">+5.6%</strong></div><p>预测仅针对当前未完结月份；历史月份保留实际结果，不再重新预估。</p></div>
-            </section>}
-
-            {view === "launch" && <section className="launch-grid">
-              <div className="panel config-panel"><span className="panel-kicker">DASHBOARD CONFIG</span><h3>看板生成配置</h3><p>修改产品、上市日期和目标销量，点击按钮即时生成看板。</p><label>产品名称<select value={launchProduct} onChange={(event) => { setLaunchProduct(event.target.value); setGenerated(false); }}>{productSeeds.map((item) => <option key={item.name}>{item.name}</option>)}</select></label><label>上市日期<input type="date" value={launchDate} onChange={(event) => { setLaunchDate(event.target.value); setGenerated(false); }} /></label><label>销售目标<input type="number" value={target} onChange={(event) => { setTarget(Number(event.target.value)); setGenerated(false); }} /></label><button className="primary-button" onClick={() => setGenerated(true)}>生成产品销售看板</button></div>
-              <div className={`panel result-panel ${generated ? "ready" : "waiting"}`}><div className="panel-heading compact"><div><span className="panel-kicker">PRODUCT RESULT</span><h3>{launchProduct}</h3></div><span className="demo-badge">演示结果</span></div>{generated ? <><div className="result-metrics"><div><span>累计销量</span><strong>{formatInt(launchSales)}</strong></div><div><span>销售门店</span><strong>{launchResult.storeCount}</strong></div><div><span>统计天数</span><strong>{launchDays}</strong></div><div><span>整体 USD</span><strong>{(launchSales / launchResult.storeCount / launchDays).toFixed(2)}</strong></div></div><div className="target-progress"><div><span>目标达成进度</span><strong>{target ? `${(launchSales / target * 100).toFixed(1)}%` : "无目标"}</strong></div><div className="wide-track"><i style={{ width: `${target ? Math.min(launchSales / target * 100, 100) : 0}%` }} /></div><small>上市日期 {launchDate} · 统计截止 2026-08-12</small></div></> : <div className="waiting-copy">配置已修改，点击“生成产品销售看板”查看新结果。</div>}</div>
-            </section>}
-          </div>
-        </div>
-      </section>
-
-      <section className="thinking-section" id="thinking">
-        <div className="section-heading dark-heading"><div><span className="section-index">HOW IT WORKS</span><h2>从业务规则到可长期使用的数据工具</h2></div></div>
-        <div className="thinking-grid">
-          <article><span>01</span><h3>服务器自动更新</h3><p>定时连接销售、门店和 SKU 数据源，自动识别新增与变更；无需人工下载、整理和上传文件。</p></article>
-          <article><span>02</span><h3>更新确认与异常报错</h3><p>发布前核对日期、行数和核心指标变化；发现缺失、突增突降或映射失败时主动告警。</p></article>
-          <article><span>03</span><h3>所有成员统一访问</h3><p>看板部署在服务器，通过网页链接即可使用；更新结果、异常状态和处理记录对所有访问者同步。</p></article>
-        </div>
-        <div className="role-note"><span>平台功能范围</span><p>自动采集 · 增量更新 · 质量校验 · 异常预警 · 多层分析 · 预测看板 · 导出共享</p></div>
-      </section>
-
-      <footer><strong>刘庆安 · 数据看板作品演示</strong><span>业务数据已脱敏并经过模拟处理。</span><a href="#top">回到顶部 ↑</a></footer>
-    </main>
-  );
+import {useMemo,useState} from "react";
+type Tab="overview"|"products"|"stores"|"regions"|"quality"|"forecast";type Scenario="保守"|"基准"|"乐观";
+const brands=[{name:"品牌 A",scale:1,stores:486,target:820000},{name:"品牌 B",scale:.72,stores:218,target:590000},{name:"品牌 C",scale:.43,stores:126,target:360000}];
+const months=[{label:"2026年10月",days:31,factor:1.08},{label:"2026年09月",days:30,factor:1.02},{label:"2026年08月",days:31,factor:.96},{label:"2026年07月",days:31,factor:.91},{label:"2026年06月",days:30,factor:.87},{label:"2026年05月",days:31,factor:.83},{label:"2026年04月",days:30,factor:.89},{label:"2026年03月",days:31,factor:.94},{label:"2026年02月",days:28,factor:.78},{label:"2026年01月",days:31,factor:.86}];
+const seeds=[{name:"大红袍珍珠奶茶",base:184260,growth:.182},{name:"茉莉轻乳茶",base:147830,growth:.126},{name:"鸭屎香柠檬茶",base:126440,growth:.084},{name:"锡兰红茶拿铁",base:98620,growth:-.021},{name:"桂花乌龙鲜奶茶",base:75480,growth:.067},{name:"青提茉莉冰茶",base:63140,growth:.215},{name:"生椰拿铁",base:52860,growth:.093},{name:"芝士葡萄冰",base:41620,growth:-.038}];
+const stores=[{name:"北京朝阳店",code:"S1001",weight:.18,region:"华北"},{name:"上海静安店",code:"S1002",weight:.16,region:"华东"},{name:"深圳南山店",code:"S1003",weight:.15,region:"华南"},{name:"杭州西湖店",code:"S1004",weight:.13,region:"华东"},{name:"成都春熙路店",code:"S1005",weight:.12,region:"西南"},{name:"武汉江汉路店",code:"S1006",weight:.10,region:"华中"},{name:"天津和平店",code:"S1007",weight:.09,region:"华北"},{name:"广州天河店",code:"S1008",weight:.07,region:"华南"}];
+const regions=[{name:"华北",weight:.27,growth:.148},{name:"华东",weight:.29,growth:.096},{name:"华南",weight:.19,growth:.213},{name:"华中",weight:.14,growth:.042},{name:"西南",weight:.11,growth:-.017}];
+const nav:{id:Tab;label:string;hint:string}[]=[{id:"overview",label:"经营总览",hint:"核心指标与趋势"},{id:"products",label:"产品分析",hint:"销量结构与排名"},{id:"stores",label:"门店分析",hint:"门店表现与贡献"},{id:"regions",label:"区域分析",hint:"区域经营对比"},{id:"quality",label:"数据质量",hint:"异常与处理记录"},{id:"forecast",label:"销售预测",hint:"月底情景测算"}];
+const fmt=(n:number)=>Math.round(n).toLocaleString("zh-CN"),pct=(n:number)=>(n>=0?"+":"")+(n*100).toFixed(1)+"%";
+function download(name:string,rows:(string|number)[][]){const body=rows.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(",")).join("\r\n");const url=URL.createObjectURL(new Blob(["\ufeff",body],{type:"text/csv;charset=utf-8"}));const a=document.createElement("a");a.href=url;a.download=name;a.click();URL.revokeObjectURL(url);}
+export default function Home(){
+ const [tab,setTab]=useState<Tab>("overview"),[bi,setBi]=useState(0),[mi,setMi]=useState(0),[q,setQ]=useState(""),[scenario,setScenario]=useState<Scenario>("基准"),[version,setVersion]=useState(0),[last,setLast]=useState("尚未刷新"),[done,setDone]=useState<string[]>([]),[expanded,setExpanded]=useState<string|null>(null);
+ const brand=brands[bi],month=months[mi],factor=brand.scale*month.factor*(1+(version%5)*.006);
+ const products=useMemo(()=>seeds.map((p,i)=>({...p,sales:Math.round(p.base*factor*(1+(i%3)*.015)),storeCount:Math.max(12,Math.round(brand.stores*(.78-i*.045)))})).sort((a,b)=>b.sales-a.sales),[factor,brand.stores]);
+ const total=products.reduce((s,p)=>s+p.sales,0),daily=total/month.days,previous=seeds.reduce((s,p)=>s+p.base*brand.scale*months[Math.min(mi+1,months.length-1)].factor,0),growth=total/previous-1;
+ const storeRows=stores.map((s,i)=>({...s,sales:Math.round(total*s.weight),daily:total*s.weight/month.days,growth:[.12,.08,.19,-.03,.15,.04,-.06,.11][i]})).sort((a,b)=>b.sales-a.sales);
+ const regionRows=regions.map(r=>({...r,sales:Math.round(total*r.weight),storeCount:stores.filter(s=>s.region===r.name).length}));
+ const filteredProducts=products.filter(p=>p.name.toLowerCase().includes(q.toLowerCase())),filteredStores=storeRows.filter(s=>(s.name+s.code+s.region).toLowerCase().includes(q.toLowerCase()));
+ const alerts=[{id:"Q01",level:"高",title:"门店销量环比下降",detail:"示例规则：单店日均销量较上一周期下降超过 20%，建议核对营业状态与数据完整性。"},{id:"Q02",level:"中",title:"产品销量出现负增长",detail:"示例规则：部分产品销量低于上一周期，建议结合促销、季节和产品调整分析。"},{id:"Q03",level:"低",title:"门店覆盖率存在差异",detail:"示例规则：不同产品的售卖门店数差距较大，建议检查铺货与上架情况。"}];
+ const pending=alerts.filter(a=>!done.includes(a.id)).length,forecast=daily*31*(scenario==="乐观"?1.08:scenario==="保守"?.92:1);
+ function refresh(){setVersion(v=>v+1);setDone([]);setLast("模拟数据已重新生成 · 第 "+(version+1)+" 次");}
+ function go(id:Tab){setTab(id);setQ("");setExpanded(null);}
+ return <main className="dash-shell"><header className="dash-top"><a href="#top" className="dash-brand"><b>LQ</b><span>刘庆安<small>经营数据分析作品集</small></span></a><div><span className="dash-pill">模拟数据 · 非生产系统</span><a href="#about">项目说明</a></div></header>
+ <section className="dash-hero" id="top"><div><small>BUSINESS INTELLIGENCE PORTFOLIO</small><h1>把经营数据，<br/><em>变成可执行的决策。</em></h1><p>围绕品牌、产品、门店和区域建立统一分析视图，展示从指标监控、结构拆解到异常识别与情景预测的分析过程。</p><div className="dash-chips"><span>2026.01–2026.10</span><span>脱敏模拟数据</span><span>经营分析 / 数据运营</span></div></div><aside><small>当前演示口径</small><strong>{month.label}</strong><span>{brand.name} · {month.days} 天统计周期</span><hr/><small>数据集版本</small><b>DEMO-{String(version+1).padStart(3,"0")}</b><small>最近刷新：{last}</small></aside></section>
+ <section className="dash-work"><nav className="dash-nav"><b>分析工作台<small>ANALYTICS</small></b>{nav.map((t,i)=><button key={t.id} className={tab===t.id?"active":""} onClick={()=>go(t.id)}><i>0{i+1}</i><span>{t.label}<small>{t.hint}</small></span>›</button>)}<div className="dash-nav-foot">● 本地模拟数据模式<small>未连接外部业务数据源</small></div></nav>
+ <div className="dash-main"><div className="dash-heading"><div><small>分析工作台 / {nav.find(t=>t.id===tab)?.label}</small><h2>{nav.find(t=>t.id===tab)?.label}</h2></div><div><select value={bi} onChange={e=>setBi(Number(e.target.value))} aria-label="选择品牌">{brands.map((b,i)=><option key={b.name} value={i}>{b.name}</option>)}</select><select value={mi} onChange={e=>setMi(Number(e.target.value))} aria-label="选择月份">{months.map((m,i)=><option key={m.label} value={i}>{m.label}</option>)}</select></div></div>
+ {tab==="overview"&&<><div className="dash-kpis"><article><small>当月销售杯数</small><strong>{fmt(total)}</strong><span>统计周期 {month.days} 天</span></article><article><small>活跃门店数</small><strong>{fmt(brand.stores)}</strong><span>品牌门店规模口径</span></article><article><small>产品 SKU 数</small><strong>{seeds.length}</strong><span>演示产品范围</span></article><article><small>日均销售杯数</small><strong>{fmt(daily)}</strong><span>当月销量 ÷ 统计天数</span></article></div><div className="dash-two"><section className="dash-card"><header><div><small>SALES TREND</small><h3>近 6 个月销售趋势</h3></div><span>单位：杯</span></header><div className="dash-bars">{months.slice(0,6).reverse().map(m=>{const v=seeds.reduce((s,p)=>s+p.base,0)*brand.scale*m.factor;return <div key={m.label}><b>{fmt(v/1000)}k</b><i style={{height:(v/(seeds.reduce((s,p)=>s+p.base,0)*brand.scale*1.08)*100)+"%"}}/><small>{m.label.slice(5,7)}月</small></div>})}</div></section><section className="dash-card"><small>TARGET TRACKING</small><h3>当月目标进度</h3><strong className="dash-target">{(total/brand.target*100).toFixed(1)}%</strong><div className="dash-track"><i style={{width:Math.min(100,total/brand.target*100)+"%"}}/></div><p>实际 {fmt(total)} / 目标 {fmt(brand.target)}</p><small>目标值为演示设定值。</small></section></div><section className="dash-card"><header><div><small>BUSINESS INSIGHTS</small><h3>本期经营观察</h3></div><span className="dash-tag">自动计算</span></header><div className="dash-insights"><article><small>01 / 产品结构</small><b>{products[0].name}</b><p>当前模拟数据销量第一，占产品销量 {(products[0].sales/total*100).toFixed(1)}%。</p></article><article><small>02 / 区域表现</small><b>{[...regionRows].sort((a,b)=>b.sales-a.sales)[0].name}区域</b><p>区域销量贡献最高，建议结合门店密度与单店效率继续拆解。</p></article><article><small>03 / 环比变化</small><b className={growth>=0?"positive":"negative"}>{pct(growth)}</b><p>基于模拟系数计算，不代表真实经营增长。</p></article></div></section></>}
+ {tab==="products"&&<section className="dash-card"><header><div><small>PRODUCT PERFORMANCE</small><h3>产品销量排名</h3><p>点击产品查看门店分布；支持筛选和 CSV 导出。</p></div><button onClick={()=>download("产品销量分析.csv",[["排名","产品","销量","售卖门店数","模拟环比"],...filteredProducts.map((p,i)=>[i+1,p.name,p.sales,p.storeCount,pct(p.growth)])])}>导出 CSV ↓</button></header><input className="dash-search" value={q} onChange={e=>setQ(e.target.value)} placeholder="搜索产品名称…"/><div className="dash-table-wrap"><table><thead><tr><th>排名 / 产品</th><th>销售杯数</th><th>售卖门店</th><th>模拟环比</th></tr></thead><tbody>{filteredProducts.map((p,i)=><><tr key={p.name} onClick={()=>setExpanded(expanded===p.name?null:p.name)}><td><b>{String(i+1).padStart(2,"0")}</b>{p.name}</td><td>{fmt(p.sales)}</td><td>{p.storeCount}</td><td className={p.growth>=0?"positive":"negative"}>{pct(p.growth)}</td></tr>{expanded===p.name&&<tr key={p.name+"-detail"}><td colSpan={4}><div className="dash-detail"><b>{p.name} · 门店销量分布（模拟分配）</b><div>{storeRows.slice(0,5).map(s=><span key={s.code}>{s.name}<strong>{fmt(p.sales*s.weight)}</strong></span>)}</div></div></td></tr>}</>)}</tbody></table></div></section>}
+ {tab==="stores"&&<section className="dash-card"><header><div><small>STORE PERFORMANCE</small><h3>门店经营排名</h3><p>门店销量按照演示权重分配，用于展示门店贡献分析。</p></div><button onClick={()=>download("门店经营分析.csv",[["排名","门店","编码","区域","销量","销量占比"],...filteredStores.map((s,i)=>[i+1,s.name,s.code,s.region,s.sales,pct(s.weight)])])}>导出 CSV ↓</button></header><input className="dash-search" value={q} onChange={e=>setQ(e.target.value)} placeholder="搜索门店、编码或区域…"/><div className="dash-table-wrap"><table><thead><tr><th>门店</th><th>区域</th><th>销售杯数</th><th>日均杯数</th><th>销量占比</th><th>模拟环比</th></tr></thead><tbody>{filteredStores.map((s,i)=><tr key={s.code}><td><b>{String(i+1).padStart(2,"0")}</b>{s.name}<small>{s.code}</small></td><td>{s.region}</td><td>{fmt(s.sales)}</td><td>{fmt(s.daily)}</td><td>{(s.weight*100).toFixed(1)}%</td><td className={s.growth>=0?"positive":"negative"}>{pct(s.growth)}</td></tr>)}</tbody></table></div></section>}
+ {tab==="regions"&&<section className="dash-card"><header><div><small>REGIONAL PERFORMANCE</small><h3>区域经营对比</h3><p>区域销量、门店数量和贡献占比使用统一分配口径。</p></div><button onClick={()=>download("区域经营分析.csv",[["区域","销售杯数","门店数","销量占比","模拟环比"],...regionRows.map(r=>[r.name,r.sales,r.storeCount,pct(r.weight),pct(r.growth)])])}>导出 CSV ↓</button></header><div className="dash-regions">{regionRows.map(r=><div key={r.name}><b>{r.name}<small>{r.storeCount} 家样例门店</small></b><i><span style={{width:r.weight*100+"%"}}/></i><strong>{fmt(r.sales)}</strong><em>{(r.weight*100).toFixed(0)}%</em><label className={r.growth>=0?"positive":"negative"}>{pct(r.growth)}</label></div>)}</div><p className="dash-note">分析提示：区域销量规模需要结合门店数量进一步拆解。建议增加单店日均销量、同店增长和门店开闭店因素，避免仅按总量判断区域表现。</p></section>}
+ {tab==="quality"&&<section className="dash-card"><header><div><small>DATA QUALITY MONITOR</small><h3>数据质量与异常示例</h3><p>以下为规则演示，不代表系统正在监控真实业务数据。</p></div><span className="dash-tag">{pending} 项待确认</span></header><div className="dash-quality"><article><small>规则示例</small><b>03</b></article><article><small>待确认</small><b>{pending}</b></article><article><small>已处理</small><b>{done.length}</b></article></div>{alerts.map(a=><div className="dash-alert" key={a.id}><b className={"level-"+a.level}>{a.level}级</b><div><strong>{a.title}</strong><p>{a.detail}</p><small>{a.id} · 模拟规则</small></div><button onClick={()=>setDone(c=>c.includes(a.id)?c.filter(x=>x!==a.id):[...c,a.id])}>{done.includes(a.id)?"撤销处理":"标记已处理"}</button></div>)}</section>}
+ {tab==="forecast"&&<div className="dash-two"><section className="dash-card"><small>MONTH-END SCENARIO</small><h3>月底销量情景测算</h3><p>以当前日均销量外推 31 天，并叠加情景系数。</p><div className="dash-scenarios">{(["保守","基准","乐观"] as Scenario[]).map(s=><button className={scenario===s?"active":""} key={s} onClick={()=>setScenario(s)}>{s}</button>)}</div><strong className="dash-forecast">{fmt(forecast)} <small>杯</small></strong><p>{scenario}情景 · 预计目标达成率 {(forecast/brand.target*100).toFixed(1)}%</p><div className="dash-track"><i style={{width:Math.min(100,forecast/brand.target*100)+"%"}}/></div></section><section className="dash-card"><small>MODEL NOTES</small><h3>预测口径说明</h3><dl><div><dt>基准日均</dt><dd>{fmt(daily)} 杯</dd></div><div><dt>外推天数</dt><dd>31 天</dd></div><div><dt>保守系数</dt><dd>0.92</dd></div><div><dt>乐观系数</dt><dd>1.08</dd></div></dl><p>这是简单情景外推，不是经过训练和回测的统计预测模型。正式分析应加入星期效应、节假日、促销、新店和历史同期数据。</p></section></div>}
+ </div></section>
+ <section className="dash-about" id="about"><div><small>PROJECT NOTES</small><h2>让分析过程可解释，<br/>让业务结论可追溯。</h2></div><div><p>本项目当前使用脱敏模拟数据，主要用于演示经营分析方法、指标口径、交互设计和数据表达。页面刷新仅重新生成演示数据，不会连接外部业务系统，也不会创建真实定时任务。</p><p>后续可在获得授权后逐步加入脱敏案例，并补充数据来源、清洗规则、指标定义、分析过程和业务建议。</p><div className="dash-chips"><span>Excel / CSV</span><span>SQL 分析</span><span>经营指标体系</span><span>数据质量</span><span>业务洞察</span></div></div></section>
+ <footer className="dash-footer"><b>刘庆安 · 经营数据分析作品集</b><span>演示数据仅用于作品展示，不代表真实企业经营结果。</span><button onClick={refresh}>重新生成模拟数据 ↻</button></footer></main>;
 }
